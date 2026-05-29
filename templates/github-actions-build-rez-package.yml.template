@@ -1,0 +1,32 @@
+name: Build Rez Package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/YOUR_ORG/openusd-builder:latest
+    steps:
+      - name: Checkout package repository
+        uses: actions/checkout@v4
+        with:
+          path: package
+
+      - name: Checkout studio-rez
+        uses: actions/checkout@v4
+        with:
+          repository: YOUR_ORG/studio-rez
+          path: studio-rez
+
+      - name: Validate and build Rez package
+        shell: bash
+        working-directory: package
+        run: |
+          source ../studio-rez/env/studio-dev.sh
+          studio-rez-doctor --soft
+          studio-rez-validate-package .
+          rez-build --install --prefix /opt/studio/packages/dev

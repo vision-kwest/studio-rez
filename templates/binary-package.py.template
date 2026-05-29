@@ -1,0 +1,13 @@
+import os
+
+name = "{{name}}"
+version = "{{version}}"
+
+requires = []
+
+
+def commands():
+    env.PATH.prepend("{root}/bin")
+    env.LD_LIBRARY_PATH.prepend("{root}/lib")
+    if os.path.isdir("{root}/python"):
+        env.PYTHONPATH.prepend("{root}/python")
