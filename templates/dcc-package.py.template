@@ -1,0 +1,13 @@
+name = "{{name}}"
+version = "{{version}}"
+
+requires = []
+
+
+def commands():
+    # DCC integrations should keep paths relative to this Rez package root.
+    env.MAYA_MODULE_PATH.prepend("{root}/maya")
+    env.HOUDINI_PATH.prepend("{root}/houdini;&")
+    env.PXR_PLUGINPATH_NAME.prepend("{root}/usd/plugins")
+    env.OCIO.set("{root}/config/ocio/config.ocio")
+    env.PYTHONPATH.prepend("{root}/python")

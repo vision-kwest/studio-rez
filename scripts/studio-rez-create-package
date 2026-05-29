@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""Create a new Rez package skeleton from studio templates."""
+
+from __future__ import annotations
+
+import argparse
+
+from studio_rez.package_templates import create_package_skeleton
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Create a studio Rez package skeleton.")
+    parser.add_argument("name", help="New package name.")
+    parser.add_argument("--type", choices=("python", "binary", "dcc", "generic"), default="generic", help="Skeleton type to create.")
+    parser.add_argument("--version", default="0.1.0", help="Initial package version.")
+    parser.add_argument("--destination", help="Optional destination directory. Defaults to ./<name>.")
+    args = parser.parse_args()
+
+    try:
+        path = create_package_skeleton(args.name, args.type, args.version, args.destination)
+    except Exception as exc:  # noqa: BLE001 - command-line tool should show concise failures.
+        print(f"FAIL: {exc}")
+        return 1
+    print(f"Created {args.type} package skeleton at {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

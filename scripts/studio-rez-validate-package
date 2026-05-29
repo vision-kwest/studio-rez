@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Validate a Rez package repository against studio standards."""
+
+from __future__ import annotations
+
+import argparse
+
+from studio_rez.validation import ValidationError, validate_package_layout
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Validate a studio Rez package repository.")
+    parser.add_argument("path", help="Path to a package repository containing package.py.")
+    args = parser.parse_args()
+    try:
+        metadata = validate_package_layout(args.path)
+    except ValidationError as exc:
+        print(f"FAIL: {exc}")
+        return 1
+    print(f"PASS: package {metadata['name']}-{metadata['version']} is valid")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

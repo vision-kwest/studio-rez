@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Print the studio Rez environment values relevant to package builds.
+set -euo pipefail
+
+printf 'STUDIO_REZ_ROOT=%s\n' "${STUDIO_REZ_ROOT:-}"
+printf 'STUDIO_PACKAGE_ROOT=%s\n' "${STUDIO_PACKAGE_ROOT:-}"
+printf 'REZ_CONFIG_FILE=%s\n' "${REZ_CONFIG_FILE:-}"
+printf 'REZ_PACKAGES_PATH=%s\n' "${REZ_PACKAGES_PATH:-}"
+printf 'PYTHONPATH=%s\n' "${PYTHONPATH:-}"
