@@ -14,7 +14,8 @@ while [[ -L "${_studio_rez_source}" ]]; do
   [[ "${_studio_rez_source}" != /* ]] && _studio_rez_source="${_studio_rez_dir}/${_studio_rez_source}"
 done
 _studio_rez_env_dir="$(cd -P "$(dirname "${_studio_rez_source}")" >/dev/null 2>&1 && pwd)"
-export STUDIO_REZ_ROOT="$(cd "${_studio_rez_env_dir}/.." >/dev/null 2>&1 && pwd)"
+STUDIO_REZ_ROOT="$(cd "${_studio_rez_env_dir}/.." >/dev/null 2>&1 && pwd)"
+export STUDIO_REZ_ROOT
 
 export STUDIO_PACKAGE_ROOT="/opt/studio/packages"
 export STUDIO_PACKAGE_DEV="${STUDIO_PACKAGE_ROOT}/dev"
