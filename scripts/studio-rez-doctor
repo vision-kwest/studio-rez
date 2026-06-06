@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Check the local studio Rez environment."""
+"""Check the local studio Rez environment.
+
+This command is intentionally verbose because it is often the first diagnostic
+run on a freshly provisioned workstation or EC2 instance. The output should show
+which package root was resolved, which stage paths were derived from it, and why
+a check passed, failed, or was downgraded in ``--soft`` mode.
+"""
 
 from __future__ import annotations
 
@@ -13,14 +19,56 @@ from studio_rez import paths
 
 
 def status(ok: bool, label: str, detail: str = "") -> bool:
+    """Print a pass/fail check line and return the boolean for aggregation."""
     mark = "PASS" if ok else "FAIL"
     print(f"[{mark}] {label}{': ' + detail if detail else ''}")
     return ok
 
 
+def report(level: str, label: str, detail: str = "") -> None:
+    """Print an informational line that should not directly affect exit status."""
+    # Keep this separate from status(): INFO/WARN lines explain resolved values
+    # or soft-mode downgrades, while PASS/FAIL lines are the checks that decide
+    # whether the command exits non-zero.
+    print(f"[{level}] {label}{': ' + detail if detail else ''}")
+
+
 def is_writable(path: Path) -> bool:
     """Return whether an existing path is writable by the current process."""
+    # os.access matches the shell-level question this doctor asks: can the
+    # current user write to this already-existing package repository directory?
     return os.access(path, os.W_OK)
+
+
+def check_stage_root(stage: str, root: Path, soft: bool) -> bool:
+    """Report existence and writability for one package stage root."""
+    # Missing directories are handled before writability so the output cannot say
+    # both "root exists" and "directory is missing" for the same stage. This was
+    # the contradictory behavior that made earlier doctor output confusing.
+    if not root.exists() or not root.is_dir():
+        if soft:
+            # --soft is used on hosts where Rez/package repos may not be mounted
+            # yet. Surface the missing path as a warning so humans see the issue,
+            # but return True so the diagnostic can continue and exit success.
+            report("WARN", f"{stage} root missing", str(root))
+            return True
+        return status(False, f"{stage} root exists", str(root))
+
+    # Only existing directories reach this point, so any following writable line
+    # is consistent with the existence line above.
+    ok = status(True, f"{stage} root exists", str(root))
+    if soft:
+        # In soft mode, do not probe permissions: a readonly/missing network
+        # mount during bootstrap should not make the doctor fail. The explicit
+        # "skipped in --soft mode" message distinguishes this from a missing dir.
+        report("INFO", f"{stage} root writable", "skipped in --soft mode")
+        return ok
+
+    # Production repositories are commonly intentionally readonly to normal users
+    # while dev/test/archive may need direct writes. Preserve that original CLI
+    # behavior by allowing prod to pass the writable check even if os.access is
+    # false, but still require writability for the other stages.
+    return status(is_writable(root) or stage == "prod", f"{stage} root writable", str(root))
 
 
 def main() -> int:
@@ -28,10 +76,31 @@ def main() -> int:
     parser.add_argument("--soft", action="store_true", help="Warn instead of failing when package roots or Rez are unavailable.")
     args = parser.parse_args()
 
+    # Resolve package paths once for this doctor invocation so all lines in the
+    # report refer to one coherent snapshot of the environment. The path helpers
+    # themselves are dynamic, so subprocess env overrides of STUDIO_PACKAGE_ROOT
+    # are still honored when this command starts.
+    package_root = paths.package_root()
+    stage_roots = {
+        "dev": paths.dev_root(),
+        "test": paths.test_root(),
+        "prod": paths.prod_root(),
+        "archive": paths.archive_root(),
+    }
+
+    # Print resolved values before checks. This makes failures actionable: users
+    # can immediately see whether STUDIO_PACKAGE_ROOT was inherited, overridden,
+    # or left at the default /opt/studio/packages location.
+    report("INFO", "STUDIO_PACKAGE_ROOT", str(package_root))
+    for stage, root in stage_roots.items():
+        report("INFO", f"{stage} root resolved", str(root))
+
     checks: list[bool] = []
     checks.append(status(sys.version_info >= (3, 10), "Python 3.10+", sys.version.split()[0]))
 
     rez_available = importlib.util.find_spec("rez") is not None
+    # Rez may not be installed in lightweight CI images or during early EC2
+    # bootstrap. --soft keeps that diagnostic visible without failing the command.
     checks.append(status(rez_available or args.soft, "Rez import availability", "available" if rez_available else "not importable"))
 
     rez_config = os.environ.get("REZ_CONFIG_FILE")
@@ -41,18 +110,8 @@ def main() -> int:
     rez_packages_path = os.environ.get("REZ_PACKAGES_PATH")
     checks.append(status(bool(rez_packages_path), "REZ_PACKAGES_PATH", rez_packages_path or "not set"))
 
-    for stage, root in (
-        ("dev", paths.dev_root()),
-        ("test", paths.test_root()),
-        ("prod", paths.prod_root()),
-        ("archive", paths.archive_root()),
-    ):
-        exists = root.exists() and root.is_dir()
-        checks.append(status(exists or args.soft, f"{stage} root exists", str(root)))
-        if exists:
-            checks.append(status(is_writable(root) or stage == "prod" or args.soft, f"{stage} root writable", str(root)))
-        else:
-            print(f"[INFO] {stage} root writable: skipped because directory is missing")
+    for stage, root in stage_roots.items():
+        checks.append(check_stage_root(stage, root, args.soft))
 
     if all(checks):
         print("studio-rez doctor: all required checks passed")
