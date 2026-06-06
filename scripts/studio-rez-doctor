@@ -18,15 +18,46 @@ def status(ok: bool, label: str, detail: str = "") -> bool:
     return ok
 
 
+def report(level: str, label: str, detail: str = "") -> None:
+    print(f"[{level}] {label}{': ' + detail if detail else ''}")
+
+
 def is_writable(path: Path) -> bool:
     """Return whether an existing path is writable by the current process."""
     return os.access(path, os.W_OK)
+
+
+def check_stage_root(stage: str, root: Path, soft: bool) -> bool:
+    """Report existence and writability for one package stage root."""
+    if not root.exists() or not root.is_dir():
+        if soft:
+            report("WARN", f"{stage} root missing", str(root))
+            return True
+        return status(False, f"{stage} root exists", str(root))
+
+    ok = status(True, f"{stage} root exists", str(root))
+    if soft:
+        report("INFO", f"{stage} root writable", "skipped in --soft mode")
+        return ok
+    return status(is_writable(root) or stage == "prod", f"{stage} root writable", str(root))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check the studio Rez environment.")
     parser.add_argument("--soft", action="store_true", help="Warn instead of failing when package roots or Rez are unavailable.")
     args = parser.parse_args()
+
+    package_root = paths.package_root()
+    stage_roots = {
+        "dev": paths.dev_root(),
+        "test": paths.test_root(),
+        "prod": paths.prod_root(),
+        "archive": paths.archive_root(),
+    }
+
+    report("INFO", "STUDIO_PACKAGE_ROOT", str(package_root))
+    for stage, root in stage_roots.items():
+        report("INFO", f"{stage} root resolved", str(root))
 
     checks: list[bool] = []
     checks.append(status(sys.version_info >= (3, 10), "Python 3.10+", sys.version.split()[0]))
@@ -41,18 +72,8 @@ def main() -> int:
     rez_packages_path = os.environ.get("REZ_PACKAGES_PATH")
     checks.append(status(bool(rez_packages_path), "REZ_PACKAGES_PATH", rez_packages_path or "not set"))
 
-    for stage, root in (
-        ("dev", paths.dev_root()),
-        ("test", paths.test_root()),
-        ("prod", paths.prod_root()),
-        ("archive", paths.archive_root()),
-    ):
-        exists = root.exists() and root.is_dir()
-        checks.append(status(exists or args.soft, f"{stage} root exists", str(root)))
-        if exists:
-            checks.append(status(is_writable(root) or stage == "prod" or args.soft, f"{stage} root writable", str(root)))
-        else:
-            print(f"[INFO] {stage} root writable: skipped because directory is missing")
+    for stage, root in stage_roots.items():
+        checks.append(check_stage_root(stage, root, args.soft))
 
     if all(checks):
         print("studio-rez doctor: all required checks passed")

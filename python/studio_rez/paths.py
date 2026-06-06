@@ -16,22 +16,22 @@ def package_root() -> Path:
 
 def dev_root() -> Path:
     """Return the development package repository path."""
-    return Path(os.environ.get("STUDIO_PACKAGE_DEV", package_root() / "dev")).expanduser()
+    return package_root() / "dev"
 
 
 def test_root() -> Path:
     """Return the test package repository path."""
-    return Path(os.environ.get("STUDIO_PACKAGE_TEST", package_root() / "test")).expanduser()
+    return package_root() / "test"
 
 
 def prod_root() -> Path:
     """Return the production package repository path."""
-    return Path(os.environ.get("STUDIO_PACKAGE_PROD", package_root() / "prod")).expanduser()
+    return package_root() / "prod"
 
 
 def archive_root() -> Path:
     """Return the archived package repository path."""
-    return Path(os.environ.get("STUDIO_PACKAGE_ARCHIVE", package_root() / "archive")).expanduser()
+    return package_root() / "archive"
 
 
 def stage_root(stage: str) -> Path:
@@ -50,7 +50,7 @@ def stage_root(stage: str) -> Path:
 
 
 def ensure_package_dirs() -> list[Path]:
-    """Create all standard stage directories and return them."""
+    """Create all standard stage directories under the current package root and return them."""
     roots = [dev_root(), test_root(), prod_root(), archive_root()]
     for root in roots:
         root.mkdir(parents=True, exist_ok=True)
