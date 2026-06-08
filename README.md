@@ -51,6 +51,30 @@ source /path/to/studio-rez/env/studio-prod.sh
 
 Each script exports `STUDIO_REZ_ROOT`, package root variables, `REZ_CONFIG_FILE`, `REZ_PACKAGES_PATH`, and adds this repo's `scripts` and `python` directories to the current shell.
 
+
+## Bootstrap Rez implicit core packages
+
+Rez requires implicit packages such as `platform`, `arch`, and `os` to exist in the package repository before resolves can use them. After sourcing the studio environment, bootstrap them into the desired stage with:
+
+```bash
+source /path/to/studio-rez/env/studio-dev.sh
+studio-rez-bootstrap-core-packages --stage dev
+```
+
+The bootstrap helper is idempotent and uses the Rez 3.4 `rez-bind` argument order. The exact commands for the default dev repository are:
+
+```bash
+rez-bind --install-path /opt/studio/packages/dev platform
+rez-bind --install-path /opt/studio/packages/dev arch
+rez-bind --install-path /opt/studio/packages/dev os
+```
+
+Do not put the package name before `--install-path`, and do not use `--path`; those forms are not valid for this Rez binding workflow. Use `--install-path` on the helper only when you need to override the selected stage path:
+
+```bash
+studio-rez-bootstrap-core-packages --stage dev --install-path /opt/studio/packages/dev
+```
+
 ## Validate a package repository
 
 ```bash

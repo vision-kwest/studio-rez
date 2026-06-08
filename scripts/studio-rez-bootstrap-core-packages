@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Bind Rez's implicit core packages into a studio package stage.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: studio-rez-bootstrap-core-packages [--stage dev|test|prod] [--install-path PATH]
+
+Bind Rez's implicit core packages (platform, arch, os) into a studio package
+repository stage. The default stage is dev.
+
+This script uses the Rez 3.4 command form:
+  rez-bind --install-path /opt/studio/packages/dev platform
+USAGE
+}
+
+stage="dev"
+install_path=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --stage)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --stage requires one of: dev, test, prod" >&2
+        exit 2
+      fi
+      stage="$2"
+      shift 2
+      ;;
+    --install-path)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --install-path requires a path" >&2
+        exit 2
+      fi
+      install_path="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unsupported argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$stage" in
+  dev|test|prod) ;;
+  *)
+    echo "ERROR: unsupported stage '$stage'. Expected one of: dev, test, prod." >&2
+    exit 2
+    ;;
+esac
+
+script_source="${BASH_SOURCE[0]}"
+while [[ -L "$script_source" ]]; do
+  script_dir="$(cd -P "$(dirname "$script_source")" >/dev/null 2>&1 && pwd)"
+  script_source="$(readlink "$script_source")"
+  [[ "$script_source" != /* ]] && script_source="$script_dir/$script_source"
+done
+script_dir="$(cd -P "$(dirname "$script_source")" >/dev/null 2>&1 && pwd)"
+inferred_root="$(cd "$script_dir/.." >/dev/null 2>&1 && pwd)"
+
+# The command is normally available only after sourcing env/studio-dev.sh or
+# env/studio-prod.sh. If it was invoked directly from the checkout, source the
+# appropriate studio environment inside this process so Rez sees the same config.
+if [[ -z "${STUDIO_REZ_ROOT:-}" || -z "${STUDIO_PACKAGE_ROOT:-}" || -z "${REZ_CONFIG_FILE:-}" ]]; then
+  env_script="$inferred_root/env/studio-dev.sh"
+  if [[ "$stage" == "prod" ]]; then
+    env_script="$inferred_root/env/studio-prod.sh"
+  fi
+  if [[ ! -f "$env_script" ]]; then
+    echo "ERROR: studio environment is not configured and $env_script was not found." >&2
+    echo "Source env/studio-dev.sh first, or set STUDIO_PACKAGE_ROOT and REZ_CONFIG_FILE." >&2
+    exit 2
+  fi
+  old_quiet="${STUDIO_REZ_QUIET:-}"
+  export STUDIO_REZ_QUIET=1
+  # shellcheck source=/dev/null
+  source "$env_script"
+  if [[ -n "$old_quiet" ]]; then
+    export STUDIO_REZ_QUIET="$old_quiet"
+  else
+    unset STUDIO_REZ_QUIET
+  fi
+fi
+
+if [[ -z "$install_path" ]]; then
+  case "$stage" in
+    dev) install_path="${STUDIO_PACKAGE_DEV:-${STUDIO_PACKAGE_ROOT}/dev}" ;;
+    test) install_path="${STUDIO_PACKAGE_TEST:-${STUDIO_PACKAGE_ROOT}/test}" ;;
+    prod) install_path="${STUDIO_PACKAGE_PROD:-${STUDIO_PACKAGE_ROOT}/prod}" ;;
+  esac
+fi
+
+if ! command -v rez-bind >/dev/null 2>&1; then
+  echo "ERROR: rez-bind was not found on PATH. Install/source Rez before bootstrapping core packages." >&2
+  exit 127
+fi
+
+mkdir -p "$install_path"
+
+printf 'studio-rez: bootstrapping Rez implicit packages into %s (%s stage)\n' "$install_path" "$stage"
+printf 'studio-rez: using Rez bind syntax: rez-bind --install-path %s <package>\n' "$install_path"
+
+packages=(platform arch os)
+for package in "${packages[@]}"; do
+  family_dir="$install_path/$package"
+  existing=""
+  if [[ -d "$family_dir" ]]; then
+    existing="$(find "$family_dir" -mindepth 2 -maxdepth 2 -name package.py -type f -print | sort || true)"
+  fi
+
+  if [[ -n "$existing" ]]; then
+    printf 'WARN: existing Rez implicit package(s) for %s under %s; leaving them unchanged.\n' "$package" "$family_dir" >&2
+    while IFS= read -r package_py; do
+      [[ -n "$package_py" ]] && printf 'WARN:   %s\n' "$package_py" >&2
+    done <<< "$existing"
+    continue
+  fi
+
+  printf 'studio-rez: binding %s\n' "$package"
+  rez-bind --install-path "$install_path" "$package"
+done
+
+printf 'studio-rez: core implicit package bootstrap complete.\n'
