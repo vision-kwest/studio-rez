@@ -32,6 +32,26 @@ studio-rez-validate-package .
 
 `studio-dev.sh` sets `REZ_CONFIG_FILE` to `config/rezconfig.dev.py` and sets `REZ_PACKAGES_PATH` to dev, test, and prod in that order.
 
+
+## Bootstrap implicit Rez packages
+
+Before building downstream packages in a fresh package repository, bind Rez's implicit core packages into the target stage. For the dev stage, run:
+
+```bash
+source ../studio-rez/env/studio-dev.sh
+studio-rez-bootstrap-core-packages --stage dev
+```
+
+The helper runs the Rez 3.4 command form below for each implicit package:
+
+```bash
+rez-bind --install-path /opt/studio/packages/dev platform
+rez-bind --install-path /opt/studio/packages/dev arch
+rez-bind --install-path /opt/studio/packages/dev os
+```
+
+The package name comes after `--install-path`; `rez-bind platform --install-path ...` and `rez-bind --path ...` are not the correct forms for this bootstrap. Existing bound packages are reported as warnings and left unchanged, so the helper can be rerun safely.
+
 ## Build OpenUSD
 
 `studio-openusd` should run inside a builder image from `studio-ci-images`, clone Pixar OpenUSD, compile it, and stage the install tree under the package repository workspace.
