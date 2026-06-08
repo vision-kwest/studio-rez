@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import importlib
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -20,6 +21,67 @@ def status(ok: bool, label: str, detail: str = "") -> bool:
 
 def report(level: str, label: str, detail: str = "") -> None:
     print(f"[{level}] {label}{': ' + detail if detail else ''}")
+
+
+def suggested_rez_fix() -> str:
+    return "\n".join(
+        [
+            "python3 -m venv /opt/studio/rez/venv",
+            "source /opt/studio/rez/venv/bin/activate",
+            "pip install rez",
+            "export PATH=/opt/studio/rez/venv/bin:$PATH",
+        ]
+    )
+
+
+def dependency_check(ok: bool, label: str, detail: str, soft: bool) -> bool:
+    """Report a required Rez dependency, warning instead of failing in soft mode."""
+    if ok:
+        return status(True, label, detail)
+    if soft:
+        report("WARN", label, detail)
+        return True
+    return status(False, label, detail)
+
+
+def can_import_rez() -> bool:
+    try:
+        importlib.import_module("rez")
+    except ImportError:
+        return False
+    return True
+
+
+def check_rez_dependencies(soft: bool) -> list[bool]:
+    """Check Rez CLIs and Python module availability."""
+    rez_command = shutil.which("rez")
+    rez_env_command = shutil.which("rez-env")
+    rez_importable = can_import_rez()
+
+    checks = [
+        dependency_check(
+            rez_command is not None,
+            "rez command availability",
+            "available" if rez_command else "not found on PATH",
+            soft,
+        ),
+        dependency_check(
+            rez_env_command is not None,
+            "rez-env command availability",
+            "available" if rez_env_command else "not found on PATH",
+            soft,
+        ),
+        dependency_check(
+            rez_importable,
+            "Rez Python import availability",
+            "available" if rez_importable else "not importable",
+            soft,
+        ),
+    ]
+    if not rez_command or not rez_env_command or not rez_importable:
+        report("INFO", "Suggested Rez install/fix", "run the following commands")
+        print(suggested_rez_fix())
+    return checks
 
 
 def is_writable(path: Path) -> bool:
@@ -62,8 +124,7 @@ def main() -> int:
     checks: list[bool] = []
     checks.append(status(sys.version_info >= (3, 10), "Python 3.10+", sys.version.split()[0]))
 
-    rez_available = importlib.util.find_spec("rez") is not None
-    checks.append(status(rez_available or args.soft, "Rez import availability", "available" if rez_available else "not importable"))
+    checks.extend(check_rez_dependencies(args.soft))
 
     rez_config = os.environ.get("REZ_CONFIG_FILE")
     config_ok = bool(rez_config) and Path(rez_config).exists()
