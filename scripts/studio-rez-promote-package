@@ -14,7 +14,7 @@ def main() -> int:
     parser.add_argument("version", help="Package version, for example 26.05.")
     parser.add_argument("source_stage", choices=("dev", "test", "prod", "archive"))
     parser.add_argument("dest_stage", choices=("dev", "test", "prod", "archive"))
-    parser.add_argument("--dry-run", action="store_true", help="Print what would be copied without changing files.")
+    parser.add_argument("--dry-run", action="store_true", help="Preview promotion without changing files.")
     args = parser.parse_args()
 
     try:
