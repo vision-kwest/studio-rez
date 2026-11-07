@@ -26,15 +26,24 @@ def publish_artifact(name: str, version: str, artifact_id: str, root: Path | Non
     if target.exists() or target.is_symlink():
         raise FileExistsError(f"Artifact already exists: {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
+    lock = target.parent / f".{artifact_id}.publishing"
+    lock.mkdir()  # Exclusive: concurrent publishers fail closed.
     temp = target.parent / f".{artifact_id}.{uuid.uuid4().hex}.tmp"
     try:
-        shutil.copytree(source, temp, symlinks=True)
-        # os.rename does not replace an existing nonempty directory on Linux.
-        # The unique artifact path is never reused by this prototype.
+        for path in source.rglob("*"):
+            if path.is_symlink() and not path.resolve().is_relative_to(source.resolve()):
+                raise ValueError(f"External package symlink: {path}")
+        shutil.copytree(source, temp, symlinks=False)
+        for path in temp.rglob("*"):
+            path.chmod(path.stat().st_mode & ~0o222)
+        temp.chmod(temp.stat().st_mode & ~0o222)
+        if target.exists() or target.is_symlink():
+            raise FileExistsError(target)
         os.rename(temp, target)
     finally:
         if temp.exists():
             shutil.rmtree(temp)
+        lock.rmdir()
     return target
 
 
@@ -46,7 +55,7 @@ def promote_link(name: str, version: str, artifact_id: str, stage: str, root: Pa
         raise ValueError("Prototype supports only test, prod and archive")
     root = root or package_root()
     artifact = root / "artifacts" / name / version / artifact_id
-    if not artifact.is_dir() or not (artifact / "package.py").is_file():
+    if not artifact.is_dir() or not (artifact / "package.py").is_file() or (artifact.parent / f".{artifact_id}.publishing").exists():
         raise FileNotFoundError(f"Missing artifact: {artifact}")
     destination = root / stage / name / version
     destination.parent.mkdir(parents=True, exist_ok=True)
