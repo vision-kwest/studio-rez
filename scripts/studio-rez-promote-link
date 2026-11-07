@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Publish one immutable Rez artifact and create stage links (Issue #6)."""
+from studio_rez.symlink_prototype import main
+
+if __name__ == "__main__":
+    main()
